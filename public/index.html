@@ -1,5 +1,57 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><title>媒体整理</title></head>
-<body><div id="app">加载中…</div></body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>媒体整理</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <h1>媒体整理</h1>
+  <p class="sub">去重 · HEIC 转 JPG · 视频压制 H.265 1080p30 · 图片瘦身至 3MB 内</p>
+
+  <div id="health" class="panel hidden"></div>
+
+  <section id="step-pick" class="panel">
+    <div id="drop" class="drop">把文件夹拖到这里</div>
+    <p class="hint" style="margin:14px 0 8px">或者直接粘贴路径（Finder 里选中文件夹按 ⌘⌥C 复制路径）：</p>
+    <div class="row">
+      <input type="text" id="pathInput" placeholder="/Users/…">
+      <button id="useBtn">使用</button>
+      <button id="browseBtn" class="ghost">浏览</button>
+    </div>
+    <div id="pickMsg" class="hint" style="margin-top:10px"></div>
+    <div id="browser" class="hidden">
+      <div class="row" style="margin-top:14px">
+        <strong id="browserPath" style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></strong>
+        <button id="upBtn" class="ghost">上级</button>
+        <button id="chooseBtn">选择这个文件夹</button>
+      </div>
+      <div id="dirlist" class="dirlist"></div>
+    </div>
+  </section>
+
+  <section id="step-plan" class="panel hidden">
+    <h2 id="planTitle"></h2>
+    <div class="stats" id="planStats"></div>
+    <label class="toggle"><input type="checkbox" id="optDedup" checked> 删除重复文件</label>
+    <label class="toggle"><input type="checkbox" id="optHeic" checked> HEIC 转 JPG</label>
+    <label class="toggle"><input type="checkbox" id="optImage" checked> 压缩超过 3MB 的图片</label>
+    <label class="toggle"><input type="checkbox" id="optVideo" checked> 压制超标视频</label>
+    <div class="row" style="margin-top:16px">
+      <button id="runBtn">开始处理</button>
+      <button id="backBtn" class="ghost">换个文件夹</button>
+    </div>
+  </section>
+
+  <section id="step-run" class="panel hidden">
+    <h2 id="phaseText">准备中…</h2>
+    <div class="bar"><i id="overallBar"></i></div>
+    <div id="slots"></div>
+    <div class="log" id="log"></div>
+  </section>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
 </html>
