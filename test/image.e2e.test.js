@@ -3,14 +3,29 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { run } from '../lib/exec.js';
+import { run, commandExists } from '../lib/exec.js';
 import { probeImage, processImage, dimensionLadder } from '../lib/image.js';
 import { Trash } from '../lib/trash.js';
 import { MAX_IMAGE_BYTES } from '../lib/video-rules.js';
+import { BACKUP_DIR } from '../lib/scan.js';
 
 const isMac = process.platform === 'darwin';
+const hasFfmpeg = await commandExists('ffmpeg');
 const ICNS =
   '/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericFolderIcon.icns';
+
+// 系统图标图案太规整，压缩率高到撑不出大文件，需要噪声图当素材
+async function makeNoiseHeic(dir, name, dim) {
+  const png = path.join(dir, `${name}.png`);
+  const heic = path.join(dir, name);
+  const filter = `nullsrc=s=${dim}x${dim},geq=random(1)*255:random(1)*255:random(1)*255`;
+  const enc = await run('ffmpeg', ['-y', '-f', 'lavfi', '-i', filter, '-frames:v', '1', png]);
+  if (enc.code !== 0) throw new Error(`生成噪声图失败: ${enc.stderr}`);
+  const conv = await run('sips', ['-s', 'format', 'heic', png, '--out', heic]);
+  if (conv.code !== 0) throw new Error(`转 HEIC 失败: ${conv.stderr}`);
+  await fs.rm(png);
+  return heic;
+}
 
 // 用系统图标生成指定格式的测试图片
 async function makeImage(dir, name, format, extraArgs = []) {
@@ -72,7 +87,7 @@ test('processImage 把超过 3MB 的 jpg 压到限额内', { skip: !isMac }, asy
   assert.ok(result.after <= MAX_IMAGE_BYTES, `压后仍有 ${result.after} 字节`);
   assert.ok(result.after < result.before);
   // 原件进了回收站
-  await fs.access(path.join(root, '_trash', 'big.jpg'));
+  await fs.access(path.join(root, BACKUP_DIR, 'big.jpg'));
   // 修改时间被还原
   const finalStat = await fs.stat(result.to);
   assert.ok(Math.abs(finalStat.mtimeMs - item.mtime) < 1000);
@@ -96,7 +111,7 @@ test('processImage 保留带 alpha 的 PNG 不转 JPG 且缩到限额内', { ski
   await fs.rm(root, { recursive: true });
 });
 
-test('processImage 把 HEIC 转成同名 JPG 并把原件收进 _trash', { skip: !isMac }, async () => {
+test('processImage 把 HEIC 转成同名 JPG 并把原件收进备份目录', { skip: !isMac }, async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'img5-'));
   const heic = await makeImage(root, 'photo.heic', 'heic', ['-Z', '1200']);
   const item = await itemOf(heic, 'photo.heic');
@@ -107,7 +122,7 @@ test('processImage 把 HEIC 转成同名 JPG 并把原件收进 _trash', { skip:
   assert.equal(result.to, path.join(root, 'photo.jpg'));
   await fs.access(path.join(root, 'photo.jpg'));
   await assert.rejects(fs.access(heic), '原 HEIC 不应留在原地');
-  await fs.access(path.join(root, '_trash', 'photo.heic'));
+  await fs.access(path.join(root, BACKUP_DIR, 'photo.heic'));
 
   // 产物确实是一张可读的 JPEG
   const info = await probeImage(result.to);
@@ -126,4 +141,37 @@ test('dimensionLadder 只给出比原图更小的档位', () => {
   assert.deepEqual(dimensionLadder(1600), [1500]);
   // 原图本就很小，无从缩起，返回原尺寸兜底
   assert.deepEqual(dimensionLadder(800), [800]);
+});
+
+// HEIC 转 JPG 后体积常常翻倍。原件不到 3MB 时 planImage 只要求转换，
+// 但产物超标就必须接着降档，否则会留下一张超标图，且下次运行会再压它一遍。
+test('HEIC 转出的 JPG 超标时继续降档', { skip: !isMac || !hasFfmpeg }, async () => {
+  const plain = await fs.mkdtemp(path.join(os.tmpdir(), 'img6a-'));
+  const laddered = await fs.mkdtemp(path.join(os.tmpdir(), 'img6b-'));
+  const src = await makeNoiseHeic(plain, 'photo.heic', 1800);
+  await fs.copyFile(src, path.join(laddered, 'photo.heic'));
+
+  const item = await itemOf(src, 'photo.heic');
+  assert.ok(item.size < MAX_IMAGE_BYTES, `HEIC 原件应小于 3MB，实际 ${item.size}`);
+
+  const onlyConvert = await processImage(item, {
+    trash: new Trash(plain), imageCompress: false,
+  });
+  const withLadder = await processImage(
+    await itemOf(path.join(laddered, 'photo.heic'), 'photo.heic'),
+    { trash: new Trash(laddered), imageCompress: true }
+  );
+
+  assert.equal(onlyConvert.action, 'heic-converted');
+  assert.equal(withLadder.action, 'heic-converted');
+  assert.ok(
+    onlyConvert.after > MAX_IMAGE_BYTES,
+    `素材没能撑出超标产物（${onlyConvert.after} 字节），这条用例失去意义`
+  );
+  assert.ok(
+    withLadder.after <= MAX_IMAGE_BYTES,
+    `降档后仍有 ${withLadder.after} 字节`
+  );
+  await fs.rm(plain, { recursive: true });
+  await fs.rm(laddered, { recursive: true });
 });
