@@ -1,7 +1,10 @@
 {
-  "name": "media-kit",
+  "name": "mac-media-tidy",
   "version": "1.0.0",
+  "description": "macOS 本地网页工具：一个文件夹一次搞定去重、HEIC 转 JPG、视频压制与图片瘦身",
   "type": "module",
+  "license": "MIT",
+  "repository": "github:bleeeet/mac-media-tidy",
   "private": true,
   "scripts": {
     "start": "node server.js",
