@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseProgressTime, buildFfmpegArgs } from '../lib/video.js';
+import { parseProgressTime, buildFfmpegArgs, processVideo } from '../lib/video.js';
+import { MIN_VIDEO_BYTES } from '../lib/video-rules.js';
 
 test('parseProgressTime 解析 ffmpeg 进度', () => {
   assert.ok(Math.abs(parseProgressTime('frame= 100 time=00:00:12.34 bitrate=') - 12.34) < 0.01);
@@ -46,4 +47,17 @@ test('buildFfmpegArgs 支持切换到 libx265', () => {
     width: 1920, height: 1080, fps: 30, bitrate: 20_000_000, duration: 10, codec: 'h264',
   }, 'libx265');
   assert.ok(args.join(' ').includes('-c:v libx265'));
+});
+
+// 小视频在 ffprobe 之前就该被放过：这里给的是不存在的路径，真去 probe 会报错
+test('processVideo 直接跳过小于 10MB 的视频', async () => {
+  const item = {
+    path: '/nowhere/small.mp4', rel: 'small.mp4',
+    size: MIN_VIDEO_BYTES - 1, mtime: 1, ext: 'mp4',
+  };
+  const result = await processVideo(item, { trash: null, encoder: 'hevc_videotoolbox' });
+
+  assert.equal(result.action, 'skipped');
+  assert.equal(result.note, '小于 10MB');
+  assert.equal(result.after, item.size);
 });
