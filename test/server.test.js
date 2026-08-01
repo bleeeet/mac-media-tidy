@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { createServer } from '../server.js';
+import { BACKUP_DIR } from '../lib/scan.js';
 
 async function withServer(fn) {
   const server = createServer();
@@ -67,10 +68,10 @@ test('POST /api/scan 返回统计且不修改文件夹', async () => {
     assert.ok(body.jobId);
   });
 
-  // 只读校验：两个文件都还在，且没有 _trash
+  // 只读校验：两个文件都还在，且没有备份目录
   await fs.access(path.join(root, 'a.jpg'));
   await fs.access(path.join(root, 'b.jpg'));
-  await assert.rejects(fs.access(path.join(root, '_trash')));
+  await assert.rejects(fs.access(path.join(root, BACKUP_DIR)));
   await fs.rm(root, { recursive: true });
 });
 
@@ -90,7 +91,7 @@ test('POST /api/run 走完整流程并通过 SSE 推送完成事件', async () =
     assert.match(text, /dedup-removed/);
   });
 
-  await fs.access(path.join(root, '_trash', 'b.jpg'));
+  await fs.access(path.join(root, BACKUP_DIR, 'b.jpg'));
   await fs.rm(root, { recursive: true });
 });
 

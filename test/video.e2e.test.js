@@ -6,6 +6,8 @@ import os from 'node:os';
 import { run, commandExists } from '../lib/exec.js';
 import { probeVideo, processVideo } from '../lib/video.js';
 import { Trash } from '../lib/trash.js';
+import { BACKUP_DIR } from '../lib/scan.js';
+import { MIN_VIDEO_BYTES } from '../lib/video-rules.js';
 
 const hasFfmpeg = await commandExists('ffmpeg');
 
@@ -20,10 +22,13 @@ async function makeVideo(dir, name, size, fps, seconds = 2) {
   return out;
 }
 
-async function itemOf(filePath, rel) {
+// processVideo 按 item.size 判断 10MB 门槛，不会重新 stat。下面几个用例要验证的是
+// 缩放、编码与回收站，不是那道门槛（它有独立的单元测试），所以直接把体积报大，
+// 免得为了凑够 10MB 去生成噪声素材——testsrc 图案压得太狠，80Mbps 也只有 2MB。
+async function itemOf(filePath, rel, size) {
   const stat = await fs.stat(filePath);
   return {
-    path: filePath, rel, size: stat.size, mtime: stat.mtimeMs,
+    path: filePath, rel, size: size ?? stat.size, mtime: stat.mtimeMs,
     ext: path.extname(filePath).slice(1).toLowerCase(),
   };
 }
@@ -43,7 +48,8 @@ test('probeVideo 读出分辨率与帧率', { skip: !hasFfmpeg }, async () => {
 test('processVideo 把 4K60 压成 1080p30 的 H.265', { skip: !hasFfmpeg }, async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'vid2-'));
   const file = await makeVideo(root, 'big.mp4', '3840x2160', 60);
-  const item = await itemOf(file, 'big.mp4');
+  const realSize = (await fs.stat(file)).size;
+  const item = await itemOf(file, 'big.mp4', MIN_VIDEO_BYTES + 1);
 
   const ratios = [];
   const result = await processVideo(item, {
@@ -53,7 +59,7 @@ test('processVideo 把 4K60 压成 1080p30 的 H.265', { skip: !hasFfmpeg }, asy
   });
 
   assert.equal(result.action, 'video-compressed', result.error || '');
-  assert.ok(result.after < result.before);
+  assert.ok(result.after < realSize, `压后 ${result.after} 不小于原始 ${realSize}`);
 
   const out = await probeVideo(result.to);
   assert.equal(out.width, 1920);
@@ -62,7 +68,7 @@ test('processVideo 把 4K60 压成 1080p30 的 H.265', { skip: !hasFfmpeg }, asy
   assert.equal(out.codec, 'hevc');
 
   // 原件进了回收站
-  await fs.access(path.join(root, '_trash', 'big.mp4'));
+  await fs.access(path.join(root, BACKUP_DIR, 'big.mp4'));
   // 进度确实被上报过
   assert.ok(ratios.length > 0, '应至少上报一次进度');
   await fs.rm(root, { recursive: true });
@@ -71,7 +77,7 @@ test('processVideo 把 4K60 压成 1080p30 的 H.265', { skip: !hasFfmpeg }, asy
 test('processVideo 把竖屏 4K 压成 1080x1920 而非横过来', { skip: !hasFfmpeg }, async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'vid4-'));
   const file = await makeVideo(root, 'portrait.mp4', '2160x3840', 30);
-  const item = await itemOf(file, 'portrait.mp4');
+  const item = await itemOf(file, 'portrait.mp4', MIN_VIDEO_BYTES + 1);
 
   const result = await processVideo(item, {
     trash: new Trash(root), encoder: 'hevc_videotoolbox',
@@ -93,12 +99,14 @@ test('processVideo 跳过已达标视频', { skip: !hasFfmpeg }, async () => {
   ]);
   if (code !== 0) throw new Error(`生成测试视频失败: ${stderr.slice(-300)}`);
 
-  const item = await itemOf(file, 'ok.mp4');
+  // 体积报大，确保走的是「参数已达标」而不是「小于 10MB」这条跳过路径
+  const item = await itemOf(file, 'ok.mp4', MIN_VIDEO_BYTES + 1);
   const result = await processVideo(item, {
     trash: new Trash(root), encoder: 'hevc_videotoolbox',
   });
 
   assert.equal(result.action, 'skipped');
+  assert.equal(result.note, '已达标');
   await fs.access(file);
   await fs.rm(root, { recursive: true });
 });

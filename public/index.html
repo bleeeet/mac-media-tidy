@@ -39,6 +39,10 @@
     <label class="toggle"><input type="checkbox" id="optHeic" checked> HEIC 转 JPG</label>
     <label class="toggle"><input type="checkbox" id="optImage" checked> 压缩超过 3MB 的图片</label>
     <label class="toggle"><input type="checkbox" id="optVideo" checked> 压制超标视频</label>
+    <label class="toggle"><input type="checkbox" id="optBackup" checked> 备份原件到「原图」文件夹</label>
+    <div id="backupWarn" class="warn hidden">
+      不备份：被替换和去重的原件将<strong>直接删除</strong>，无法回滚。
+    </div>
     <div class="row" style="margin-top:16px">
       <button id="runBtn">开始处理</button>
       <button id="backBtn" class="ghost">换个文件夹</button>

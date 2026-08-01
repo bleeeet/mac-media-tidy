@@ -193,6 +193,7 @@ function showPlan(plan) {
     [s.imageCompressCount, '张图片超 3MB'],
     [s.videoCompressCount, '个视频待压制'],
   ];
+  if (s.skippedCount > 0) cards.push([s.skippedCount, '个已处理过，跳过']);
   $('planStats').innerHTML =
     cards
       .map(([n, l]) => `<div class="stat"><div class="n">${n}</div><div class="l">${esc(l)}</div></div>`)
@@ -211,6 +212,10 @@ $('backBtn').addEventListener('click', () => {
   $('step-pick').classList.remove('hidden');
 });
 
+$('optBackup').addEventListener('change', (e) => {
+  $('backupWarn').classList.toggle('hidden', e.target.checked);
+});
+
 // ---------- 执行 ----------
 
 $('runBtn').addEventListener('click', async () => {
@@ -220,6 +225,7 @@ $('runBtn').addEventListener('click', async () => {
     heic: $('optHeic').checked,
     imageCompress: $('optImage').checked,
     videoCompress: $('optVideo').checked,
+    backup: $('optBackup').checked,
   };
 
   const imageCount = state.plan.images.filter(
@@ -301,8 +307,12 @@ function handleEvent(event, es) {
     $('phaseText').innerHTML =
       `全部完成，共节省 ${fmtBytes(r.savedBytes)}` +
       (r.errors.length ? `，${r.errors.length} 个文件失败` : '') +
-      '<div class="hint" style="font-weight:400;margin-top:6px">原文件都在 ' +
-      `<code>${esc(r.trashDir || '_trash')}</code>，确认无误后可自行删除。</div>`;
+      '<div class="hint" style="font-weight:400;margin-top:6px">' +
+      (r.trashDir
+        ? `原文件都在 <code>${esc(r.trashDir)}</code>，确认无误后可自行删除。`
+        : '原文件已直接删除（本次未备份）。') +
+      (r.removedBackups?.length ? '上次留下的备份目录也已清理。' : '') +
+      '</div>';
   }
 }
 

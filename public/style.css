@@ -87,6 +87,10 @@ label.toggle { display: flex; gap: 8px; align-items: center; padding: 6px 0; cur
 .tag.err { background: #3a1a1a; color: var(--err); }
 
 .hint { color: var(--muted); font-size: 13px; }
+.warn {
+  background: #3a1a1a; color: var(--err); font-size: 13px;
+  border-radius: 6px; padding: 8px 12px; margin: 4px 0 0;
+}
 .error { color: var(--err); }
 .hidden { display: none; }
 code { background: #0c0e13; padding: 2px 6px; border-radius: 4px; font-size: 12px; }

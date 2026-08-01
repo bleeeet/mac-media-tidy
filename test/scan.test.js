@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { scanFolder, isProcessableImage } from '../lib/scan.js';
+import { scanFolder, isProcessableImage, BACKUP_DIR } from '../lib/scan.js';
 
 async function makeTree() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scan-'));
@@ -57,4 +57,18 @@ test('isProcessableImage 排除 gif/webp/bmp', () => {
   assert.equal(isProcessableImage('gif'), false);
   assert.equal(isProcessableImage('webp'), false);
   assert.equal(isProcessableImage('bmp'), false);
+});
+
+test('scanFolder 跳过本工具建的「原图」，但不跳过用户自己的同名文件夹', async () => {
+  const mine = await fs.mkdtemp(path.join(os.tmpdir(), 'scan-mine-'));
+  await fs.mkdir(path.join(mine, BACKUP_DIR));
+  await fs.writeFile(path.join(mine, BACKUP_DIR, 'photo.jpg'), 'x');
+
+  const rels = (await scanFolder(mine)).images.map((i) => i.rel);
+  assert.deepEqual(rels, [path.join(BACKUP_DIR, 'photo.jpg')]);
+
+  // 放进 manifest.json 后它就成了本工具的备份目录，应当被跳过
+  await fs.writeFile(path.join(mine, BACKUP_DIR, 'manifest.json'), '[]');
+  assert.deepEqual((await scanFolder(mine)).images, []);
+  await fs.rm(mine, { recursive: true });
 });
